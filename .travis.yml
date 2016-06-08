@@ -6,6 +6,9 @@ go:
 - tip
 
 before_install:
+- go get github.com/axw/gocov/gocov
+- go get github.com/mattn/goveralls
+- if ! go get github.com/golang/tools/cmd/cover; then go get golang.org/x/tools/cmd/cover; fi
 - export TRAVIS_CI=true
 - export KAFKA_VERSION=0.8.2.2
 - export SCALA_VERSION=2.10
@@ -31,6 +34,10 @@ before_install:
 - sed -r -i "s/^(port)=(.*)/\\1=$PORT/g" $KAFKA_PATH/config/server.properties
 - sed -r -i "s/^(log4j.rootLogger)=(.*)( stdout)/\\1=WARN\\3/g" $KAFKA_PATH/config/log4j.properties
 - $KAFKA_PATH/bin/kafka-server-start.sh $KAFKA_PATH/config/server.properties &
+
+script:
+- $HOME/gopath/bin/goveralls -service=travis-ci
+- go test -v -race -cover
 
 after_script:
 - $KAFKA_PATH/bin/kafka-server-stop.sh

@@ -3,6 +3,7 @@ kafka-client
 [![GoDoc](https://godoc.org/github.com/serejja/kafka-client?status.png)](https://godoc.org/github.com/serejja/kafka-client)
 [![Build Status](https://travis-ci.org/serejja/kafka-client.svg?branch=master)](https://travis-ci.org/serejja/kafka-client)
 [![Go Report Card](https://goreportcard.com/badge/github.com/serejja/kafka-client)](https://goreportcard.com/report/github.com/serejja/kafka-client)
+[![Coverage Status](https://coveralls.io/repos/github/serejja/kafka-client/badge.svg?branch=master)](https://coveralls.io/github/serejja/kafka-client?branch=master)
 
 Apache Kafka low level client in Golang
 
