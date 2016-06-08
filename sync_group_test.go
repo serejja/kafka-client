@@ -17,7 +17,7 @@ func TestSyncGroupRequest(t *testing.T) {
 	goodSyncGroupRequest.GenerationID = 3
 	goodSyncGroupRequest.MemberID = "bar"
 	goodSyncGroupRequest.GroupAssignment = map[string][]byte{
-		"foo": []byte{1},
+		"foo": {1},
 	}
 	testRequest(t, goodSyncGroupRequest, goodSyncGroupRequestBytes)
 }

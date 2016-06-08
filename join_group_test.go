@@ -18,11 +18,11 @@ func TestJoinGroupRequest(t *testing.T) {
 	joinGroupRequestWithProtocols.MemberID = "member"
 	joinGroupRequestWithProtocols.ProtocolType = "consumer"
 	joinGroupRequestWithProtocols.GroupProtocols = []*GroupProtocol{
-		&GroupProtocol{
+		{
 			ProtocolName:     "foo",
 			ProtocolMetadata: []byte{0x01},
 		},
-		&GroupProtocol{
+		{
 			ProtocolName:     "bar",
 			ProtocolMetadata: []byte{0x02},
 		},
