@@ -171,7 +171,7 @@ func (cc *Config) Validate() error {
 	}
 
 	if cc.ConsumerMetadataRetries < 0 {
-		ErrConfigInvalidConsumerMetadataRetries
+		return ErrConfigInvalidConsumerMetadataRetries
 	}
 
 	if cc.ConsumerMetadataBackoff < time.Millisecond {
@@ -196,7 +196,7 @@ type KafkaClient struct {
 // New creates a new KafkaClient with a given ClientConfig. May return an error if the passed config is invalid.
 func New(config *Config) (*KafkaClient, error) {
 	if config == nil {
-		return ErrNoClientConfig
+		return nil, ErrNoClientConfig
 	}
 
 	if err := config.Validate(); err != nil {
