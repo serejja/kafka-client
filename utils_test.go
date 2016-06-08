@@ -2,6 +2,7 @@ package client
 
 import (
 	crand "crypto/rand"
+	"github.com/yanzay/log"
 	"math/rand"
 	"net"
 	"reflect"
@@ -132,7 +133,7 @@ func closeWithin(t *testing.T, timeout time.Duration, connector Connector) {
 	select {
 	case <-connector.Close():
 		{
-			Info("test", "Successfully closed connector")
+			log.Info("Successfully closed connector")
 		}
 	case <-time.After(timeout):
 		{

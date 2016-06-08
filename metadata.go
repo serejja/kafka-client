@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"github.com/yanzay/log"
 	"sort"
 	"sync"
 	"time"
@@ -97,7 +98,7 @@ func (m *Metadata) PartitionsFor(topic string) ([]int32, error) {
 }
 
 func (m *Metadata) Refresh(topics []string) error {
-	Logger.Info("Refreshing metadata for topics %v", topics)
+	log.Infof("Refreshing metadata for topics %v", topics)
 	m.metadataLock.Lock()
 	defer m.metadataLock.Unlock()
 
@@ -196,7 +197,7 @@ func (m *Metadata) refresh(topics []string) error {
 
 		m.metadata[topicMetadata.Topic] = partitionLeaders
 		m.metadataExpires[topicMetadata.Topic] = time.Now()
-		Logger.Debug("Received metadata: partitions %v for topic %s", partitionLeaders, topicMetadata.Topic)
+		log.Debugf("Received metadata: partitions %v for topic %s", partitionLeaders, topicMetadata.Topic)
 	}
 
 	return nil

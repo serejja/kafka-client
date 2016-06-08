@@ -5,6 +5,7 @@ package client
 import (
 	"errors"
 	"fmt"
+	"github.com/yanzay/log"
 	"io"
 	"net"
 	"strconv"
@@ -264,7 +265,7 @@ func (dc *DefaultConnector) GetTopicMetadata(topics []string) (*MetadataResponse
 			return metadata, nil
 		}
 
-		Debugf(dc, "GetTopicMetadata for %s failed after %d try", topics, i)
+		log.Debugf("GetTopicMetadata for %s failed after %d try", topics, i)
 		time.Sleep(dc.config.MetadataBackoff)
 	}
 
@@ -291,7 +292,7 @@ func (dc *DefaultConnector) Fetch(topic string, partition int32, offset int64) (
 	}
 
 	if response.Error(topic, partition) == ErrNotLeaderForPartition {
-		Infof(dc, "Sent a fetch reqest to a non-leader broker. Refleshing metadata for topic %s and retrying the request", topic)
+		log.Infof("Sent a fetch reqest to a non-leader broker. Refleshing metadata for topic %s and retrying the request", topic)
 		err = dc.metadata.Refresh([]string{topic})
 		if err != nil {
 			return nil, err
@@ -323,7 +324,7 @@ func (dc *DefaultConnector) tryFetch(topic string, partition int32, offset int64
 	decodingErr := response.Read(decoder)
 	if decodingErr != nil {
 		dc.metadata.Invalidate(topic)
-		Errorf(dc, "Could not decode a FetchResponse. Reason: %s", decodingErr.Reason())
+		log.Errorf("Could not decode a FetchResponse. Reason: %s", decodingErr.Reason())
 		return nil, decodingErr.Error()
 	}
 
@@ -332,7 +333,7 @@ func (dc *DefaultConnector) tryFetch(topic string, partition int32, offset int64
 
 // GetOffset gets the offset for a given group, topic and partition from Kafka. A part of new offset management API.
 func (dc *DefaultConnector) GetOffset(group string, topic string, partition int32) (int64, error) {
-	Logger.Info("Getting offset for group %s, topic %s, partition %d", group, topic, partition)
+	log.Infof("Getting offset for group %s, topic %s, partition %d", group, topic, partition)
 	coordinator, err := dc.metadata.OffsetCoordinator(group)
 	if err != nil {
 		return InvalidOffset, err
@@ -347,7 +348,7 @@ func (dc *DefaultConnector) GetOffset(group string, topic string, partition int3
 	response := new(OffsetFetchResponse)
 	decodingErr := dc.decode(bytes, response)
 	if decodingErr != nil {
-		Errorf(dc, "Could not decode an OffsetFetchResponse. Reason: %s", decodingErr.Reason())
+		log.Errorf("Could not decode an OffsetFetchResponse. Reason: %s", decodingErr.Reason())
 		return InvalidOffset, decodingErr.Error()
 	}
 
@@ -373,7 +374,7 @@ func (dc *DefaultConnector) CommitOffset(group string, topic string, partition i
 			return nil
 		}
 
-		Debugf(dc, "Failed to commit offset %d for group %s, topic %s, partition %d after %d try: %s", offset, group, topic, partition, i, err)
+		log.Debugf("Failed to commit offset %d for group %s, topic %s, partition %d after %d try: %s", offset, group, topic, partition, i, err)
 		time.Sleep(dc.config.CommitOffsetBackoff)
 	}
 
@@ -450,7 +451,7 @@ func (dc *DefaultConnector) GetConsumerMetadata(group string) (*ConsumerMetadata
 			return metadata, nil
 		}
 
-		Debugf(dc, "Failed to get consumer coordinator for group %s after %d try: %s", group, i, err)
+		log.Debugf("Failed to get consumer coordinator for group %s after %d try: %s", group, i, err)
 		time.Sleep(dc.config.ConsumerMetadataBackoff)
 	}
 
@@ -462,7 +463,7 @@ func (dc *DefaultConnector) tryGetConsumerMetadata(group string) (*ConsumerMetad
 
 	response, err := dc.sendToAllAndReturnFirstSuccessful(request, dc.consumerMetadataValidator)
 	if err != nil {
-		Infof(dc, "Could not get consumer metadata from all known brokers: %s", err)
+		log.Infof("Could not get consumer metadata from all known brokers: %s", err)
 		return nil, err
 	}
 
@@ -486,7 +487,7 @@ func (dc *DefaultConnector) tryCommitOffset(group string, topic string, partitio
 	response := new(OffsetCommitResponse)
 	decodingErr := dc.decode(bytes, response)
 	if decodingErr != nil {
-		Errorf(dc, "Could not decode an OffsetCommitResponse. Reason: %s", decodingErr.Reason())
+		log.Errorf("Could not decode an OffsetCommitResponse. Reason: %s", decodingErr.Reason())
 		return decodingErr.Error()
 	}
 
@@ -508,7 +509,7 @@ func (dc *DefaultConnector) decode(bytes []byte, response Response) *DecodingErr
 	decoder := NewBinaryDecoder(bytes)
 	decodingErr := response.Read(decoder)
 	if decodingErr != nil {
-		Errorf(dc, "Could not decode a response. Reason: %s", decodingErr.Reason())
+		log.Errorf("Could not decode a response. Reason: %s", decodingErr.Reason())
 		return decodingErr
 	}
 

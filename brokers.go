@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"github.com/yanzay/log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -92,7 +93,7 @@ func (b *Brokers) GetAll() []*BrokerConnection {
 
 func (b *Brokers) Add(broker *Broker) {
 	if broker == nil {
-		Logger.Warn("Brokers.Add received a nil broker, ignoring")
+		log.Warning("Brokers.Add received a nil broker, ignoring")
 		return
 	}
 
@@ -103,7 +104,7 @@ func (b *Brokers) Add(broker *Broker) {
 
 func (b *Brokers) Update(broker *Broker) {
 	if broker == nil {
-		Logger.Warn("Brokers.Update received a nil broker, ignoring")
+		log.Warning("Brokers.Update received a nil broker, ignoring")
 		return
 	}
 
@@ -123,7 +124,7 @@ func (b *Brokers) Remove(id int32) {
 	defer b.lock.Unlock()
 
 	if b.brokers[id] == nil {
-		Logger.Debug("Tried to remove inexisting broker, ignoring")
+		log.Debug("Tried to remove inexisting broker, ignoring")
 		return
 	}
 
