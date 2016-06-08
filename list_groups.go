@@ -1,5 +1,6 @@
 package client
 
+// ListGroupsRequest is used to list the current groups managed by a broker
 type ListGroupsRequest struct{}
 
 // Key returns the Kafka API key for ListGroupsRequest.
@@ -14,6 +15,7 @@ func (*ListGroupsRequest) Version() int16 {
 
 func (*ListGroupsRequest) Write(encoder Encoder) {}
 
+// ListGroupsResponse lists the current groups managed by a broker and contains an error if it happened.
 type ListGroupsResponse struct {
 	Error  error
 	Groups map[string]string

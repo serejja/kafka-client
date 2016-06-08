@@ -1,5 +1,6 @@
 package client
 
+// LeaveGroupRequest is used to directly depart a group.
 type LeaveGroupRequest struct {
 	GroupID  string
 	MemberID string
@@ -20,6 +21,7 @@ func (lgr *LeaveGroupRequest) Write(encoder Encoder) {
 	encoder.WriteString(lgr.MemberID)
 }
 
+// LeaveGroupResponse contains whether the member successfully left a group and contains a failure reason if not.
 type LeaveGroupResponse struct {
 	Error error
 }

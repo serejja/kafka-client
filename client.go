@@ -48,8 +48,8 @@ type Client interface {
 	Close() <-chan struct{}
 }
 
-// ClientConfig is used to pass multiple configuration values for a Client
-type ClientConfig struct {
+// Config is used to pass multiple configuration values for a Client
+type Config struct {
 	// BrokerList is a bootstrap list to discover other brokers in a cluster. At least one broker is required.
 	BrokerList []string
 
@@ -67,12 +67,6 @@ type ClientConfig struct {
 
 	// A keep alive period for a TCP connection.
 	KeepAliveTimeout time.Duration
-
-	// Maximum number of open connections for a client.
-	MaxConnections int
-
-	// Maximum number of open connections for a single broker for a client.
-	MaxConnectionsPerBroker int
 
 	// Maximum fetch size in bytes which will be used in all Consume() calls.
 	FetchSize int32
@@ -109,15 +103,13 @@ type ClientConfig struct {
 }
 
 // NewConfig returns a new ClientConfig with sane defaults.
-func NewConfig() *ClientConfig {
-	return &ClientConfig{
+func NewConfig() *Config {
+	return &Config{
 		ReadTimeout:             5 * time.Second,
 		WriteTimeout:            5 * time.Second,
 		ConnectTimeout:          5 * time.Second,
 		KeepAlive:               true,
 		KeepAliveTimeout:        1 * time.Minute,
-		MaxConnections:          5,
-		MaxConnectionsPerBroker: 5,
 		FetchMinBytes:           1,
 		FetchSize:               1024000,
 		FetchMaxWaitTime:        1000,
@@ -133,73 +125,61 @@ func NewConfig() *ClientConfig {
 }
 
 // Validate validates this ClientConfig. Returns a corresponding error if the ClientConfig is invalid and nil otherwise.
-func (cc *ClientConfig) Validate() error {
-	if cc == nil {
-		return errors.New("Please provide a ClientConfig.")
-	}
-
+func (cc *Config) Validate() error {
 	if len(cc.BrokerList) == 0 {
-		return errors.New("BrokerList must have at least one broker.")
+		return ErrConfigNoBrokers
 	}
 
 	if cc.ReadTimeout < time.Millisecond {
-		return errors.New("ReadTimeout must be at least 1ms.")
+		return ErrConfigInvalidReadTimeout
 	}
 
 	if cc.WriteTimeout < time.Millisecond {
-		return errors.New("WriteTimeout must be at least 1ms.")
+		return ErrConfigInvalidWriteTimeout
 	}
 
 	if cc.ConnectTimeout < time.Millisecond {
-		return errors.New("ConnectTimeout must be at least 1ms.")
+		return ErrConfigInvalidConnectTimeout
 	}
 
 	if cc.KeepAliveTimeout < time.Millisecond {
-		return errors.New("KeepAliveTimeout must be at least 1ms.")
-	}
-
-	if cc.MaxConnections < 1 {
-		return errors.New("MaxConnections cannot be less than 1.")
-	}
-
-	if cc.MaxConnectionsPerBroker < 1 {
-		return errors.New("MaxConnectionsPerBroker cannot be less than 1.")
+		return ErrConfigInvalidKeepAliveTimeout
 	}
 
 	if cc.FetchSize < 1 {
-		return errors.New("FetchSize cannot be less than 1.")
+		return ErrConfigInvalidFetchSize
 	}
 
 	if cc.MetadataRetries < 0 {
-		return errors.New("MetadataRetries cannot be less than 0.")
+		return ErrConfigInvalidMetadataRetries
 	}
 
 	if cc.MetadataBackoff < time.Millisecond {
-		return errors.New("MetadataBackoff must be at least 1ms.")
+		return ErrConfigInvalidMetadataBackoff
 	}
 
 	if cc.MetadataTTL < time.Millisecond {
-		return errors.New("MetadataTTL must be at least 1ms.")
+		return ErrConfigInvalidMetadataTTL
 	}
 
 	if cc.CommitOffsetRetries < 0 {
-		return errors.New("CommitOffsetRetries cannot be less than 0.")
+		return ErrConfigInvalidCommitOffsetRetries
 	}
 
 	if cc.CommitOffsetBackoff < time.Millisecond {
-		return errors.New("CommitOffsetBackoff must be at least 1ms.")
+		return ErrConfigInvalidCommitOffsetBackoff
 	}
 
 	if cc.ConsumerMetadataRetries < 0 {
-		return errors.New("ConsumerMetadataRetries cannot be less than 0.")
+		ErrConfigInvalidConsumerMetadataRetries
 	}
 
 	if cc.ConsumerMetadataBackoff < time.Millisecond {
-		return errors.New("ConsumerMetadataBackoff must be at least 1ms.")
+		return ErrConfigInvalidConsumerMetadataBackoff
 	}
 
 	if cc.ClientID == "" {
-		return errors.New("ClientId cannot be empty.")
+		return ErrConfigEmptyClientID
 	}
 
 	return nil
@@ -207,14 +187,18 @@ func (cc *ClientConfig) Validate() error {
 
 // KafkaClient is a default (and only one for now) Client implementation for kafka-client library.
 type KafkaClient struct {
-	config           ClientConfig
+	config           Config
 	metadata         *Metadata
 	bootstrapBrokers []*BrokerConnection
 	lock             sync.RWMutex
 }
 
 // New creates a new KafkaClient with a given ClientConfig. May return an error if the passed config is invalid.
-func New(config *ClientConfig) (*KafkaClient, error) {
+func New(config *Config) (*KafkaClient, error) {
+	if config == nil {
+		return ErrNoClientConfig
+	}
+
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -372,6 +356,8 @@ func (c *KafkaClient) CommitOffset(group string, topic string, partition int32, 
 	return fmt.Errorf("Could not get commit offset %d for group %s, topic %s, partition %d after %d retries", offset, group, topic, partition, c.config.CommitOffsetRetries)
 }
 
+// GetLeader returns a leader broker for a given topic and partition. Returns an error if fails to get leader for
+// whatever reason for MetadataRetries retries.
 func (c *KafkaClient) GetLeader(topic string, partition int32) (*BrokerConnection, error) {
 	leader, err := c.metadata.Leader(topic, partition)
 	if err != nil {
@@ -396,6 +382,7 @@ func (c *KafkaClient) Close() <-chan struct{} {
 	return closed
 }
 
+// Metadata returns Metadata structure used by this Client.
 func (c *KafkaClient) Metadata() *Metadata {
 	return c.metadata
 }
@@ -435,6 +422,8 @@ func (c *KafkaClient) getLeaderRetryBackoff(topic string, partition int32, retri
 	return -1, err
 }
 
+// GetConsumerMetadata returns a ConsumerMetadataResponse for a given consumer group.
+// May return an error if fails to get consumer metadata for whatever reason within ConsumerMetadataRetries retries.
 func (c *KafkaClient) GetConsumerMetadata(group string) (*ConsumerMetadataResponse, error) {
 	for i := 0; i <= c.config.ConsumerMetadataRetries; i++ {
 		metadata, err := c.tryGetConsumerMetadata(group)

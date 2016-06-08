@@ -145,3 +145,50 @@ var BrokerErrors = map[int16]error{
 	30: ErrGroupAuthorizationFailed,
 	31: ErrClusterAuthorizationFailed,
 }
+
+// ClientConfig validation errors
+
+// ErrNoClientConfig happens when trying to create a new client without a configuration.
+var ErrNoClientConfig = errors.New("ClientConfig cannot be nil.")
+
+// ErrConfigNoBrokers happens when trying to create a new client without bootstrap brokers specified.
+var ErrConfigNoBrokers = errors.New("BrokerList must have at least one broker.")
+
+// ErrConfigInvalidReadTimeout happens when trying to create a new client with too small ReadTimeout value.
+var ErrConfigInvalidReadTimeout = errors.New("ReadTimeout must be at least 1ms.")
+
+// ErrConfigInvalidWriteTimeout happens when trying to create a new client with too small WriteTimeout value.
+var ErrConfigInvalidWriteTimeout = errors.New("WriteTimeout must be at least 1ms.")
+
+// ErrConfigInvalidConnectTimeout happens when trying to create a new client with too small ConnectTimeout value.
+var ErrConfigInvalidConnectTimeout = errors.New("ConnectTimeout must be at least 1ms.")
+
+// ErrConfigInvalidKeepAliveTimeout happens when trying to create a new client with too small KeepAliveTimeout value.
+var ErrConfigInvalidKeepAliveTimeout = errors.New("KeepAliveTimeout must be at least 1ms.")
+
+// ErrConfigInvalidFetchSize happens when trying to create a new client with too small FetchSize value.
+var ErrConfigInvalidFetchSize = errors.New("FetchSize cannot be less than 1.")
+
+// ErrConfigInvalidMetadataRetries happens when trying to create a new client with too small MetadataRetries value.
+var ErrConfigInvalidMetadataRetries = errors.New("MetadataRetries cannot be less than 0.")
+
+// ErrConfigInvalidMetadataBackoff happens when trying to create a new client with too small MetadataBackoff value.
+var ErrConfigInvalidMetadataBackoff = errors.New("MetadataBackoff must be at least 1ms.")
+
+// ErrConfigInvalidMetadataTTL happens when trying to create a new client with too small MetadataTTL value.
+var ErrConfigInvalidMetadataTTL = errors.New("MetadataTTL must be at least 1ms.")
+
+// ErrConfigInvalidCommitOffsetRetries happens when trying to create a new client with too small CommitOffsetRetries value.
+var ErrConfigInvalidCommitOffsetRetries = errors.New("CommitOffsetRetries cannot be less than 0.")
+
+// ErrConfigInvalidCommitOffsetBackoff happens when trying to create a new client with too small CommitOffsetBackoff value.
+var ErrConfigInvalidCommitOffsetBackoff = errors.New("CommitOffsetBackoff must be at least 1ms.")
+
+// ErrConfigInvalidConsumerMetadataRetries happens when trying to create a new client with too small ConsumerMetadataRetries value.
+var ErrConfigInvalidConsumerMetadataRetries = errors.New("ConsumerMetadataRetries cannot be less than 0.")
+
+// ErrConfigInvalidConsumerMetadataBackoff happens when trying to create a new client with too small ConsumerMetadataBackoff value.
+var ErrConfigInvalidConsumerMetadataBackoff = errors.New("ConsumerMetadataBackoff must be at least 1ms.")
+
+// ErrConfigEmptyClientID happens when trying to create a new client with empty ClientID value.
+var ErrConfigEmptyClientID = errors.New("ClientID cannot be empty.")

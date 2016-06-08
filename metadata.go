@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// Metadata is a helper structure that provides access to topic/partition leaders and offset coordinators, caches them,
+// refreshes and invalidates when necessary.
 type Metadata struct {
 	Brokers         *Brokers
 	kafka           Client
@@ -21,6 +23,7 @@ type Metadata struct {
 	offsetCoordinatorLock sync.RWMutex
 }
 
+// NewMetadata creates a new Metadata for a given Client and Brokers with metadata cache TTL set to metadataTTL.
 func NewMetadata(kafkaClient Client, brokers *Brokers, metadataTTL time.Duration) *Metadata {
 	return &Metadata{
 		Brokers:            brokers,
@@ -32,6 +35,8 @@ func NewMetadata(kafkaClient Client, brokers *Brokers, metadataTTL time.Duration
 	}
 }
 
+// Leader tries to get a leader for a topic and partition from cache. Automatically refreshes if the leader information
+// is missing or expired. May return an error if fails to get a leader for whatever reason.
 func (m *Metadata) Leader(topic string, partition int32) (int32, error) {
 	topicMetadata, err := m.TopicMetadata(topic)
 	if err != nil {
@@ -62,6 +67,9 @@ func (m *Metadata) Leader(topic string, partition int32) (int32, error) {
 	return leader, nil
 }
 
+// TopicMetadata returns a map where keys are partitions of a topic and values are leader broker IDs.
+// Automatically refreshes metadata if it is missing or expired.
+// May return an error if fails to to get metadata for whatever reason.
 func (m *Metadata) TopicMetadata(topic string) (map[int32]int32, error) {
 	topicMetadata, ttl := m.topicMetadata(topic)
 
@@ -82,6 +90,9 @@ func (m *Metadata) TopicMetadata(topic string) (map[int32]int32, error) {
 	return topicMetadata, nil
 }
 
+// PartitionsFor returns a sorted slice of partitions for a given topic.
+// Automatically refreshes metadata if it is missing or expired.
+// May return an error if fails to to get metadata for whatever reason.
 func (m *Metadata) PartitionsFor(topic string) ([]int32, error) {
 	topicMetadata, err := m.TopicMetadata(topic)
 	if err != nil {
@@ -93,10 +104,13 @@ func (m *Metadata) PartitionsFor(topic string) ([]int32, error) {
 		partitions = append(partitions, partition)
 	}
 
-	sort.Sort(Int32Slice(partitions))
+	sort.Sort(int32Slice(partitions))
 	return partitions, nil
 }
 
+// Refresh forces metadata refresh for given topics.
+// If the argument is empty or nil, metadata for all known topics by a Kafka cluster will be requested.
+// May return an error if fails to to get metadata for whatever reason.
 func (m *Metadata) Refresh(topics []string) error {
 	log.Infof("Refreshing metadata for topics %v", topics)
 	m.metadataLock.Lock()
@@ -105,6 +119,8 @@ func (m *Metadata) Refresh(topics []string) error {
 	return m.refresh(topics)
 }
 
+// Invalidate forcibly invalidates metadata cache for a given topic so that next time it is requested
+// it is guaranteed to be refreshed.
 func (m *Metadata) Invalidate(topic string) {
 	m.metadataLock.Lock()
 	defer m.metadataLock.Unlock()
@@ -112,6 +128,8 @@ func (m *Metadata) Invalidate(topic string) {
 	m.metadataExpires[topic] = time.Unix(0, 0)
 }
 
+// OffsetCoordinator returns a BrokerConnection for an offset coordinator for a given group ID.
+// May return an error if fails to to get metadata for whatever reason.
 func (m *Metadata) OffsetCoordinator(group string) (*BrokerConnection, error) {
 	m.offsetCoordinatorLock.RLock()
 	coordinatorID, exists := m.offsetCoordinators[group]
@@ -203,8 +221,8 @@ func (m *Metadata) refresh(topics []string) error {
 	return nil
 }
 
-type Int32Slice []int32
+type int32Slice []int32
 
-func (p Int32Slice) Len() int           { return len(p) }
-func (p Int32Slice) Less(i, j int) bool { return p[i] < p[j] }
-func (p Int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p int32Slice) Len() int           { return len(p) }
+func (p int32Slice) Less(i, j int) bool { return p[i] < p[j] }
+func (p int32Slice) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }

@@ -9,11 +9,13 @@ import (
 	"time"
 )
 
+// BrokerConnection manages TCP connections to a single broker.
 type BrokerConnection struct {
 	broker *Broker
 	pool   sync.Pool
 }
 
+// NewBrokerConnection creates a new BrokerConnection to a given broker with a given TCP keep alive timeout.
 func NewBrokerConnection(broker *Broker, keepAliveTimeout time.Duration) *BrokerConnection {
 	return &BrokerConnection{
 		broker: broker,
@@ -43,6 +45,8 @@ func NewBrokerConnection(broker *Broker, keepAliveTimeout time.Duration) *Broker
 	}
 }
 
+// GetConnection either gets an existing connection from pool or creates a new one. May return an error if
+// fails to open a new connection.
 func (bc *BrokerConnection) GetConnection() (*net.TCPConn, error) {
 	maybeConn := bc.pool.Get()
 	err, ok := maybeConn.(error)
@@ -53,10 +57,12 @@ func (bc *BrokerConnection) GetConnection() (*net.TCPConn, error) {
 	return maybeConn.(*net.TCPConn), nil
 }
 
+// ReleaseConnection puts an existing connection back to pool to be reused later.
 func (bc *BrokerConnection) ReleaseConnection(conn *net.TCPConn) {
 	bc.pool.Put(conn)
 }
 
+// Brokers provide information about Kafka cluster and expose convenience functions to simplify interaction with it.
 type Brokers struct {
 	brokers          map[int32]*BrokerConnection
 	correlationIDs   *CorrelationIDGenerator
@@ -64,6 +70,8 @@ type Brokers struct {
 	lock             sync.RWMutex
 }
 
+// NewBrokers creates new Brokers with provided TCP keep alive timeout for all connection pools that will be created
+// by this structure.
 func NewBrokers(keepAliveTimeout time.Duration) *Brokers {
 	return &Brokers{
 		brokers:          make(map[int32]*BrokerConnection),
@@ -72,6 +80,7 @@ func NewBrokers(keepAliveTimeout time.Duration) *Brokers {
 	}
 }
 
+// Get gets a BrokerConnection for a given broker ID.
 func (b *Brokers) Get(id int32) *BrokerConnection {
 	b.lock.RLock()
 	defer b.lock.RUnlock()
@@ -79,6 +88,7 @@ func (b *Brokers) Get(id int32) *BrokerConnection {
 	return b.brokers[id]
 }
 
+// GetAll gets all BrokerConnections for this Brokers structure.
 func (b *Brokers) GetAll() []*BrokerConnection {
 	b.lock.RLock()
 	defer b.lock.RUnlock()
@@ -91,6 +101,7 @@ func (b *Brokers) GetAll() []*BrokerConnection {
 	return brokers
 }
 
+// Add adds a new Kafka broker infromation to this Brokers structure.
 func (b *Brokers) Add(broker *Broker) {
 	if broker == nil {
 		log.Warning("Brokers.Add received a nil broker, ignoring")
@@ -102,6 +113,7 @@ func (b *Brokers) Add(broker *Broker) {
 	b.lock.Unlock()
 }
 
+// Update updates Kafka broker information in this Brokers structure.
 func (b *Brokers) Update(broker *Broker) {
 	if broker == nil {
 		log.Warning("Brokers.Update received a nil broker, ignoring")
@@ -119,6 +131,7 @@ func (b *Brokers) Update(broker *Broker) {
 	}
 }
 
+// Remove removes Kafka broker information from this Brokers structure.
 func (b *Brokers) Remove(id int32) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
@@ -131,14 +144,17 @@ func (b *Brokers) Remove(id int32) {
 	delete(b.brokers, id)
 }
 
+// NextCorrelationID returns a next sequential request correlation ID.
 func (b *Brokers) NextCorrelationID() int32 {
 	return b.correlationIDs.NextCorrelationID()
 }
 
+// CorrelationIDGenerator is a simple structure that provides thread-safe correlation ID generation.
 type CorrelationIDGenerator struct {
 	id int32
 }
 
+// NextCorrelationID returns a next sequential request correlation ID.
 func (c *CorrelationIDGenerator) NextCorrelationID() int32 {
 	return atomic.AddInt32(&c.id, 1)
 }

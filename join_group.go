@@ -1,5 +1,6 @@
 package client
 
+// JoinGroupRequest is used to become a member of a group, creating it if there are no active members.
 type JoinGroupRequest struct {
 	GroupID        string
 	SessionTimeout int32
@@ -32,11 +33,13 @@ func (jgr *JoinGroupRequest) Write(encoder Encoder) {
 	}
 }
 
+// GroupProtocol carries additional protocol information for a ProtocolType in JoinGroupRequest.
 type GroupProtocol struct {
 	ProtocolName     string
 	ProtocolMetadata []byte
 }
 
+// JoinGroupResponse kindly asks you to write a meaningful comment when you get a chance.
 type JoinGroupResponse struct {
 	Error         error
 	GenerationID  int32

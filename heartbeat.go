@@ -1,5 +1,6 @@
 package client
 
+// HeartbeatRequest is used to keep a member alive in a group.
 type HeartbeatRequest struct {
 	GroupID      string
 	GenerationID int32
@@ -22,6 +23,7 @@ func (hr *HeartbeatRequest) Write(encoder Encoder) {
 	encoder.WriteString(hr.MemberID)
 }
 
+// HeartbeatResponse signals whether the sent HeartbeatRequest succeeded or not, and tells why if not.
 type HeartbeatResponse struct {
 	Error error
 }

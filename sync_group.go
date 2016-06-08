@@ -1,5 +1,6 @@
 package client
 
+// SyncGroupRequest is used to synchronize state for all members of a group.
 type SyncGroupRequest struct {
 	GroupID         string
 	GenerationID    int32
@@ -30,6 +31,7 @@ func (sgr *SyncGroupRequest) Write(encoder Encoder) {
 	}
 }
 
+// SyncGroupResponse contains information about partition distribution within a group.
 type SyncGroupResponse struct {
 	Error            error
 	MemberAssignment []byte

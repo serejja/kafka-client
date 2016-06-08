@@ -1,5 +1,6 @@
 package client
 
+// DescribeGroupsRequest is used to fetch consumer group state information from Kafka cluster.
 type DescribeGroupsRequest struct {
 	Groups []string
 }
@@ -21,10 +22,12 @@ func (dgr *DescribeGroupsRequest) Write(encoder Encoder) {
 	}
 }
 
+// DescribeGroupsResponse is used to hold consumer group state information from Kafka cluster.
 type DescribeGroupsResponse struct {
 	Groups []*GroupDescription
 }
 
+//
 func (dgr *DescribeGroupsResponse) Read(decoder Decoder) *DecodingError {
 	groupsLen, err := decoder.GetInt32()
 	if err != nil {
@@ -44,6 +47,7 @@ func (dgr *DescribeGroupsResponse) Read(decoder Decoder) *DecodingError {
 	return nil
 }
 
+// GroupDescription holds information about a single consumer group in a Kafka cluster.
 type GroupDescription struct {
 	Error        error
 	GroupID      string
@@ -99,6 +103,7 @@ func (gd *GroupDescription) Read(decoder Decoder) *DecodingError {
 	return nil
 }
 
+// GroupMemberDescription holds information about a single consumer group member in a Kafka cluster.
 type GroupMemberDescription struct {
 	MemberID         string
 	ClientID         string
