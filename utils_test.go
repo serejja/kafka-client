@@ -118,26 +118,26 @@ func startTCPListener(t *testing.T) net.Listener {
 	return listener
 }
 
-func testConnector(t *testing.T) *DefaultConnector {
-	config := NewConnectorConfig()
+func testClient(t *testing.T) *KafkaClient {
+	config := NewConfig()
 	config.BrokerList = []string{"localhost:9092"}
 
-	connector, err := NewDefaultConnector(config)
+	kafkaClient, err := New(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return connector
+	return kafkaClient
 }
 
-func closeWithin(t *testing.T, timeout time.Duration, connector Connector) {
+func closeWithin(t *testing.T, timeout time.Duration, kafkaClient Client) {
 	select {
-	case <-connector.Close():
+	case <-kafkaClient.Close():
 		{
-			log.Info("Successfully closed connector")
+			log.Info("Successfully closed client")
 		}
 	case <-time.After(timeout):
 		{
-			t.Errorf("Failed to close connector within %s seconds", timeout)
+			t.Errorf("Failed to close client within %s seconds", timeout)
 		}
 	}
 }

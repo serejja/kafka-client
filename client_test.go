@@ -24,7 +24,7 @@ func init() {
 	}
 }
 
-func TestDefaultConnectorFunctional(t *testing.T) {
+func TestKafkaClientFunctional(t *testing.T) {
 	if !brokerUp && !ci {
 		t.Skip("Broker is not running. Please spin up the broker at localhost:9092 for this test to work.")
 	}
@@ -32,21 +32,21 @@ func TestDefaultConnectorFunctional(t *testing.T) {
 	numMessages := 1000
 	topicName := fmt.Sprintf("kafka-client-%d", time.Now().Unix())
 
-	connector := testConnector(t)
-	testTopicMetadata(t, topicName, connector)
-	testOffsetStorage(t, topicName, connector)
-	testProduce(t, topicName, numMessages, connector)
-	testConsume(t, topicName, numMessages, connector)
-	closeWithin(t, time.Second, connector)
+	kafkaClient := testClient(t)
+	testTopicMetadata(t, topicName, kafkaClient)
+	testOffsetStorage(t, topicName, kafkaClient)
+	testProduce(t, topicName, numMessages, kafkaClient)
+	testConsume(t, topicName, numMessages, kafkaClient)
+	closeWithin(t, time.Second, kafkaClient)
 
-	anotherConnector := testConnector(t)
+	anotherClient := testClient(t)
 	//should also work fine - must get topic metadata before consuming
-	testConsume(t, topicName, numMessages, anotherConnector)
-	closeWithin(t, time.Second, anotherConnector)
+	testConsume(t, topicName, numMessages, anotherClient)
+	closeWithin(t, time.Second, anotherClient)
 }
 
-func testTopicMetadata(t *testing.T, topicName string, connector *DefaultConnector) {
-	metadata, err := connector.GetTopicMetadata([]string{topicName})
+func testTopicMetadata(t *testing.T, topicName string, kafkaClient *KafkaClient) {
+	metadata, err := kafkaClient.GetTopicMetadata([]string{topicName})
 	assertFatal(t, err, nil)
 
 	assertNot(t, len(metadata.Brokers), 0)
@@ -76,23 +76,23 @@ func testTopicMetadata(t *testing.T, topicName string, connector *DefaultConnect
 	assert(t, partitionMetadata.Replicas, []int32{0})
 }
 
-func testOffsetStorage(t *testing.T, topicName string, connector *DefaultConnector) {
+func testOffsetStorage(t *testing.T, topicName string, kafkaClient *KafkaClient) {
 	group := fmt.Sprintf("test-%d", time.Now().Unix())
 	targetOffset := rand.Int63()
 
-	offset, err := connector.GetOffset(group, topicName, 0)
+	offset, err := kafkaClient.GetOffset(group, topicName, 0)
 	assertFatal(t, err, ErrUnknownTopicOrPartition)
 	assert(t, offset, int64(-1))
 
-	err = connector.CommitOffset(group, topicName, 0, targetOffset)
+	err = kafkaClient.CommitOffset(group, topicName, 0, targetOffset)
 	assertFatal(t, err, nil)
 
-	offset, err = connector.GetOffset(group, topicName, 0)
+	offset, err = kafkaClient.GetOffset(group, topicName, 0)
 	assertFatal(t, err, nil)
 	assert(t, offset, targetOffset)
 }
 
-func testProduce(t *testing.T, topicName string, numMessages int, connector *DefaultConnector) {
+func testProduce(t *testing.T, topicName string, numMessages int, kafkaClient *KafkaClient) {
 	produceRequest := new(ProduceRequest)
 	produceRequest.AckTimeoutMs = 1000
 	produceRequest.RequiredAcks = 1
@@ -103,14 +103,14 @@ func testProduce(t *testing.T, topicName string, numMessages int, connector *Def
 		})
 	}
 
-	leader, err := connector.GetLeader(topicName, 0)
+	leader, err := kafkaClient.GetLeader(topicName, 0)
 	assert(t, err, nil)
 	assertNot(t, leader, (*BrokerConnection)(nil))
-	bytes, err := connector.syncSendAndReceive(leader, produceRequest)
+	bytes, err := kafkaClient.syncSendAndReceive(leader, produceRequest)
 	assertFatal(t, err, nil)
 
 	produceResponse := new(ProduceResponse)
-	decodingErr := connector.decode(bytes, produceResponse)
+	decodingErr := kafkaClient.decode(bytes, produceResponse)
 	assertFatal(t, decodingErr, (*DecodingError)(nil))
 
 	topicBlock, exists := produceResponse.Status[topicName]
@@ -122,8 +122,8 @@ func testProduce(t *testing.T, topicName string, numMessages int, connector *Def
 	assert(t, partitionBlock.Offset, int64(0))
 }
 
-func testConsume(t *testing.T, topicName string, numMessages int, connector *DefaultConnector) {
-	response, err := connector.Fetch(topicName, 0, 0)
+func testConsume(t *testing.T, topicName string, numMessages int, kafkaClient *KafkaClient) {
+	response, err := kafkaClient.Fetch(topicName, 0, 0)
 	assertFatal(t, response.Error(topicName, 0), ErrNoError)
 	assertFatal(t, err, nil)
 	messages, err := response.GetMessages()

@@ -17,8 +17,8 @@ import (
 // InvalidOffset is a constant that is used to denote an invalid or uninitialized offset.
 const InvalidOffset int64 = -1
 
-// Connector is an interface that should provide ways to clearly interact with Kafka cluster and hide all broker management stuff from user.
-type Connector interface {
+// Client is an interface that should provide ways to clearly interact with Kafka cluster and hide all broker management stuff from user.
+type Client interface {
 	// GetTopicMetadata is primarily used to discover leaders for given topics and how many partitions these topics have.
 	// Passing it an empty topic list will retrieve metadata for all topics in a cluster.
 	GetTopicMetadata(topics []string) (*MetadataResponse, error)
@@ -43,13 +43,13 @@ type Connector interface {
 	// Metadata returns a structure that holds all topic and broker metadata.
 	Metadata() *Metadata
 
-	// Tells the Connector to close all existing connections and stop.
-	// This method is NOT blocking but returns a channel which will get a single value once the closing is finished.
-	Close() <-chan bool
+	// Tells the Client to close all existing connections and stop.
+	// This method is NOT blocking but returns a channel which will be closed once the closing is finished.
+	Close() <-chan struct{}
 }
 
-// ConnectorConfig is used to pass multiple configuration values for a Connector
-type ConnectorConfig struct {
+// ClientConfig is used to pass multiple configuration values for a Client
+type ClientConfig struct {
 	// BrokerList is a bootstrap list to discover other brokers in a cluster. At least one broker is required.
 	BrokerList []string
 
@@ -68,10 +68,10 @@ type ConnectorConfig struct {
 	// A keep alive period for a TCP connection.
 	KeepAliveTimeout time.Duration
 
-	// Maximum number of open connections for a connector.
+	// Maximum number of open connections for a client.
 	MaxConnections int
 
-	// Maximum number of open connections for a single broker for a connector.
+	// Maximum number of open connections for a single broker for a client.
 	MaxConnectionsPerBroker int
 
 	// Maximum fetch size in bytes which will be used in all Consume() calls.
@@ -104,13 +104,13 @@ type ConnectorConfig struct {
 	// Backoff value between consumer metadata requests.
 	ConsumerMetadataBackoff time.Duration
 
-	// ClientID that will be used by a connector to identify client requests by broker.
+	// ClientID that will be used by a Client to identify client requests by broker.
 	ClientID string
 }
 
-// NewConnectorConfig returns a new ConnectorConfig with sane defaults.
-func NewConnectorConfig() *ConnectorConfig {
-	return &ConnectorConfig{
+// NewConfig returns a new ClientConfig with sane defaults.
+func NewConfig() *ClientConfig {
+	return &ClientConfig{
 		ReadTimeout:             5 * time.Second,
 		WriteTimeout:            5 * time.Second,
 		ConnectTimeout:          5 * time.Second,
@@ -132,10 +132,10 @@ func NewConnectorConfig() *ConnectorConfig {
 	}
 }
 
-// Validate validates this ConnectorConfig. Returns a corresponding error if the ConnectorConfig is invalid and nil otherwise.
-func (cc *ConnectorConfig) Validate() error {
+// Validate validates this ClientConfig. Returns a corresponding error if the ClientConfig is invalid and nil otherwise.
+func (cc *ClientConfig) Validate() error {
 	if cc == nil {
-		return errors.New("Please provide a ConnectorConfig.")
+		return errors.New("Please provide a ClientConfig.")
 	}
 
 	if len(cc.BrokerList) == 0 {
@@ -205,19 +205,16 @@ func (cc *ConnectorConfig) Validate() error {
 	return nil
 }
 
-// DefaultConnector is a default (and only one for now) Connector implementation for kafka-client library.
-type DefaultConnector struct {
-	config           ConnectorConfig
+// KafkaClient is a default (and only one for now) Client implementation for kafka-client library.
+type KafkaClient struct {
+	config           ClientConfig
 	metadata         *Metadata
 	bootstrapBrokers []*BrokerConnection
 	lock             sync.RWMutex
-
-	//offset coordination part
-	offsetCoordinators map[string]int32
 }
 
-// NewDefaultConnector creates a new DefaultConnector with a given ConnectorConfig. May return an error if the passed config is invalid.
-func NewDefaultConnector(config *ConnectorConfig) (*DefaultConnector, error) {
+// New creates a new KafkaClient with a given ClientConfig. May return an error if the passed config is invalid.
+func New(config *ClientConfig) (*KafkaClient, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -242,41 +239,35 @@ func NewDefaultConnector(config *ConnectorConfig) (*DefaultConnector, error) {
 		}, config.KeepAliveTimeout)
 	}
 
-	connector := &DefaultConnector{
-		config:             *config,
-		bootstrapBrokers:   bootstrapConnections,
-		offsetCoordinators: make(map[string]int32),
+	kafkaClient := &KafkaClient{
+		config:           *config,
+		bootstrapBrokers: bootstrapConnections,
 	}
-	connector.metadata = NewMetadata(connector, NewBrokers(config.KeepAliveTimeout), config.MetadataTTL)
+	kafkaClient.metadata = NewMetadata(kafkaClient, NewBrokers(config.KeepAliveTimeout), config.MetadataTTL)
 
-	return connector, nil
-}
-
-// Returns a string representation of this DefaultConnector.
-func (dc *DefaultConnector) String() string {
-	return "Default Connector"
+	return kafkaClient, nil
 }
 
 // GetTopicMetadata is primarily used to discover leaders for given topics and how many partitions these topics have.
 // Passing it an empty topic list will retrieve metadata for all topics in a cluster.
-func (dc *DefaultConnector) GetTopicMetadata(topics []string) (*MetadataResponse, error) {
-	for i := 0; i <= dc.config.MetadataRetries; i++ {
-		if metadata, err := dc.getMetadata(topics); err == nil {
+func (c *KafkaClient) GetTopicMetadata(topics []string) (*MetadataResponse, error) {
+	for i := 0; i <= c.config.MetadataRetries; i++ {
+		if metadata, err := c.getMetadata(topics); err == nil {
 			return metadata, nil
 		}
 
 		log.Debugf("GetTopicMetadata for %s failed after %d try", topics, i)
-		time.Sleep(dc.config.MetadataBackoff)
+		time.Sleep(c.config.MetadataBackoff)
 	}
 
-	return nil, fmt.Errorf("Could not get topic metadata for %s after %d retries", topics, dc.config.MetadataRetries)
+	return nil, fmt.Errorf("Could not get topic metadata for %s after %d retries", topics, c.config.MetadataRetries)
 }
 
 // GetAvailableOffset issues an offset request to a specified topic and partition with a given offset time.
-func (dc *DefaultConnector) GetAvailableOffset(topic string, partition int32, offsetTime int64) (int64, error) {
+func (c *KafkaClient) GetAvailableOffset(topic string, partition int32, offsetTime int64) (int64, error) {
 	request := new(OffsetRequest)
 	request.AddPartitionOffsetRequestInfo(topic, partition, offsetTime, 1)
-	response, err := dc.sendToAllAndReturnFirstSuccessful(request, dc.offsetValidator)
+	response, err := c.sendToAllAndReturnFirstSuccessful(request, c.offsetValidator)
 	if response != nil {
 		return response.(*OffsetResponse).PartitionErrorAndOffsets[topic][partition].Offsets[0], err
 	}
@@ -285,37 +276,37 @@ func (dc *DefaultConnector) GetAvailableOffset(topic string, partition int32, of
 }
 
 // Fetch issues a single fetch request to a broker responsible for a given topic and partition and returns a FetchResponse that contains messages starting from a given offset.
-func (dc *DefaultConnector) Fetch(topic string, partition int32, offset int64) (*FetchResponse, error) {
-	response, err := dc.tryFetch(topic, partition, offset)
+func (c *KafkaClient) Fetch(topic string, partition int32, offset int64) (*FetchResponse, error) {
+	response, err := c.tryFetch(topic, partition, offset)
 	if err != nil {
 		return response, err
 	}
 
 	if response.Error(topic, partition) == ErrNotLeaderForPartition {
 		log.Infof("Sent a fetch reqest to a non-leader broker. Refleshing metadata for topic %s and retrying the request", topic)
-		err = dc.metadata.Refresh([]string{topic})
+		err = c.metadata.Refresh([]string{topic})
 		if err != nil {
 			return nil, err
 		}
-		response, err = dc.tryFetch(topic, partition, offset)
+		response, err = c.tryFetch(topic, partition, offset)
 	}
 
 	return response, err
 }
 
-func (dc *DefaultConnector) tryFetch(topic string, partition int32, offset int64) (*FetchResponse, error) {
-	brokerConnection, err := dc.GetLeader(topic, partition)
+func (c *KafkaClient) tryFetch(topic string, partition int32, offset int64) (*FetchResponse, error) {
+	brokerConnection, err := c.GetLeader(topic, partition)
 	if err != nil {
 		return nil, err
 	}
 
 	request := new(FetchRequest)
-	request.MinBytes = dc.config.FetchMinBytes
-	request.MaxWait = dc.config.FetchMaxWaitTime
-	request.AddFetch(topic, partition, offset, dc.config.FetchSize)
-	bytes, err := dc.syncSendAndReceive(brokerConnection, request)
+	request.MinBytes = c.config.FetchMinBytes
+	request.MaxWait = c.config.FetchMaxWaitTime
+	request.AddFetch(topic, partition, offset, c.config.FetchSize)
+	bytes, err := c.syncSendAndReceive(brokerConnection, request)
 	if err != nil {
-		dc.metadata.Invalidate(topic)
+		c.metadata.Invalidate(topic)
 		return nil, err
 	}
 
@@ -323,7 +314,7 @@ func (dc *DefaultConnector) tryFetch(topic string, partition int32, offset int64
 	response := new(FetchResponse)
 	decodingErr := response.Read(decoder)
 	if decodingErr != nil {
-		dc.metadata.Invalidate(topic)
+		c.metadata.Invalidate(topic)
 		log.Errorf("Could not decode a FetchResponse. Reason: %s", decodingErr.Reason())
 		return nil, decodingErr.Error()
 	}
@@ -332,21 +323,21 @@ func (dc *DefaultConnector) tryFetch(topic string, partition int32, offset int64
 }
 
 // GetOffset gets the offset for a given group, topic and partition from Kafka. A part of new offset management API.
-func (dc *DefaultConnector) GetOffset(group string, topic string, partition int32) (int64, error) {
+func (c *KafkaClient) GetOffset(group string, topic string, partition int32) (int64, error) {
 	log.Infof("Getting offset for group %s, topic %s, partition %d", group, topic, partition)
-	coordinator, err := dc.metadata.OffsetCoordinator(group)
+	coordinator, err := c.metadata.OffsetCoordinator(group)
 	if err != nil {
 		return InvalidOffset, err
 	}
 
 	request := NewOffsetFetchRequest(group)
 	request.AddOffset(topic, partition)
-	bytes, err := dc.syncSendAndReceive(coordinator, request)
+	bytes, err := c.syncSendAndReceive(coordinator, request)
 	if err != nil {
 		return InvalidOffset, err
 	}
 	response := new(OffsetFetchResponse)
-	decodingErr := dc.decode(bytes, response)
+	decodingErr := c.decode(bytes, response)
 	if decodingErr != nil {
 		log.Errorf("Could not decode an OffsetFetchResponse. Reason: %s", decodingErr.Reason())
 		return InvalidOffset, decodingErr.Error()
@@ -367,54 +358,54 @@ func (dc *DefaultConnector) GetOffset(group string, topic string, partition int3
 }
 
 // CommitOffset commits the offset for a given group, topic and partition to Kafka. A part of new offset management API.
-func (dc *DefaultConnector) CommitOffset(group string, topic string, partition int32, offset int64) error {
-	for i := 0; i <= dc.config.CommitOffsetRetries; i++ {
-		err := dc.tryCommitOffset(group, topic, partition, offset)
+func (c *KafkaClient) CommitOffset(group string, topic string, partition int32, offset int64) error {
+	for i := 0; i <= c.config.CommitOffsetRetries; i++ {
+		err := c.tryCommitOffset(group, topic, partition, offset)
 		if err == nil {
 			return nil
 		}
 
 		log.Debugf("Failed to commit offset %d for group %s, topic %s, partition %d after %d try: %s", offset, group, topic, partition, i, err)
-		time.Sleep(dc.config.CommitOffsetBackoff)
+		time.Sleep(c.config.CommitOffsetBackoff)
 	}
 
-	return fmt.Errorf("Could not get commit offset %d for group %s, topic %s, partition %d after %d retries", offset, group, topic, partition, dc.config.CommitOffsetRetries)
+	return fmt.Errorf("Could not get commit offset %d for group %s, topic %s, partition %d after %d retries", offset, group, topic, partition, c.config.CommitOffsetRetries)
 }
 
-func (dc *DefaultConnector) GetLeader(topic string, partition int32) (*BrokerConnection, error) {
-	leader, err := dc.metadata.Leader(topic, partition)
+func (c *KafkaClient) GetLeader(topic string, partition int32) (*BrokerConnection, error) {
+	leader, err := c.metadata.Leader(topic, partition)
 	if err != nil {
-		leader, err = dc.getLeaderRetryBackoff(topic, partition, dc.config.MetadataRetries)
+		leader, err = c.getLeaderRetryBackoff(topic, partition, c.config.MetadataRetries)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return dc.metadata.Brokers.Get(leader), nil
+	return c.metadata.Brokers.Get(leader), nil
 }
 
-// Close tells the Connector to close all existing connections and stop.
-// This method is NOT blocking but returns a channel which will get a single value once the closing is finished.
-func (dc *DefaultConnector) Close() <-chan bool {
-	closed := make(chan bool)
+// Close tells the Client to close all existing connections and stop.
+// This method is NOT blocking but returns a channel which will be closed once the closing is finished.
+func (c *KafkaClient) Close() <-chan struct{} {
+	closed := make(chan struct{})
 	go func() {
-		dc.bootstrapBrokers = nil
-		closed <- true
+		c.bootstrapBrokers = nil
+		close(closed)
 	}()
 
 	return closed
 }
 
-func (dc *DefaultConnector) Metadata() *Metadata {
-	return dc.metadata
+func (c *KafkaClient) Metadata() *Metadata {
+	return c.metadata
 }
 
-func (dc *DefaultConnector) getMetadata(topics []string) (*MetadataResponse, error) {
+func (c *KafkaClient) getMetadata(topics []string) (*MetadataResponse, error) {
 	request := NewMetadataRequest(topics)
-	brokerConnections := dc.metadata.Brokers.GetAll()
-	response, err := dc.sendToAllBrokers(brokerConnections, request, dc.topicMetadataValidator(topics))
+	brokerConnections := c.metadata.Brokers.GetAll()
+	response, err := c.sendToAllBrokers(brokerConnections, request, c.topicMetadataValidator(topics))
 	if err != nil {
-		response, err = dc.sendToAllBrokers(dc.bootstrapBrokers, request, dc.topicMetadataValidator(topics))
+		response, err = c.sendToAllBrokers(c.bootstrapBrokers, request, c.topicMetadataValidator(topics))
 	}
 
 	if response != nil {
@@ -424,44 +415,44 @@ func (dc *DefaultConnector) getMetadata(topics []string) (*MetadataResponse, err
 	return nil, err
 }
 
-func (dc *DefaultConnector) getLeaderRetryBackoff(topic string, partition int32, retries int) (int32, error) {
+func (c *KafkaClient) getLeaderRetryBackoff(topic string, partition int32, retries int) (int32, error) {
 	var err error
 	for i := 0; i <= retries; i++ {
-		err = dc.metadata.Refresh([]string{topic})
+		err = c.metadata.Refresh([]string{topic})
 		if err != nil {
 			continue
 		}
 
 		leader := int32(-1)
-		leader, err = dc.metadata.Leader(topic, partition)
+		leader, err = c.metadata.Leader(topic, partition)
 		if err == nil {
 			return leader, nil
 		}
 
-		time.Sleep(dc.config.MetadataBackoff)
+		time.Sleep(c.config.MetadataBackoff)
 	}
 
 	return -1, err
 }
 
-func (dc *DefaultConnector) GetConsumerMetadata(group string) (*ConsumerMetadataResponse, error) {
-	for i := 0; i <= dc.config.ConsumerMetadataRetries; i++ {
-		metadata, err := dc.tryGetConsumerMetadata(group)
+func (c *KafkaClient) GetConsumerMetadata(group string) (*ConsumerMetadataResponse, error) {
+	for i := 0; i <= c.config.ConsumerMetadataRetries; i++ {
+		metadata, err := c.tryGetConsumerMetadata(group)
 		if err == nil {
 			return metadata, nil
 		}
 
 		log.Debugf("Failed to get consumer coordinator for group %s after %d try: %s", group, i, err)
-		time.Sleep(dc.config.ConsumerMetadataBackoff)
+		time.Sleep(c.config.ConsumerMetadataBackoff)
 	}
 
-	return nil, fmt.Errorf("Could not get consumer coordinator for group %s after %d retries", group, dc.config.ConsumerMetadataRetries)
+	return nil, fmt.Errorf("Could not get consumer coordinator for group %s after %d retries", group, c.config.ConsumerMetadataRetries)
 }
 
-func (dc *DefaultConnector) tryGetConsumerMetadata(group string) (*ConsumerMetadataResponse, error) {
+func (c *KafkaClient) tryGetConsumerMetadata(group string) (*ConsumerMetadataResponse, error) {
 	request := NewConsumerMetadataRequest(group)
 
-	response, err := dc.sendToAllAndReturnFirstSuccessful(request, dc.consumerMetadataValidator)
+	response, err := c.sendToAllAndReturnFirstSuccessful(request, c.consumerMetadataValidator)
 	if err != nil {
 		log.Infof("Could not get consumer metadata from all known brokers: %s", err)
 		return nil, err
@@ -470,8 +461,8 @@ func (dc *DefaultConnector) tryGetConsumerMetadata(group string) (*ConsumerMetad
 	return response.(*ConsumerMetadataResponse), nil
 }
 
-func (dc *DefaultConnector) tryCommitOffset(group string, topic string, partition int32, offset int64) error {
-	coordinator, err := dc.metadata.OffsetCoordinator(group)
+func (c *KafkaClient) tryCommitOffset(group string, topic string, partition int32, offset int64) error {
+	coordinator, err := c.metadata.OffsetCoordinator(group)
 	if err != nil {
 		return err
 	}
@@ -479,13 +470,13 @@ func (dc *DefaultConnector) tryCommitOffset(group string, topic string, partitio
 	request := NewOffsetCommitRequest(group)
 	request.AddOffset(topic, partition, offset, time.Now().Unix(), "")
 
-	bytes, err := dc.syncSendAndReceive(coordinator, request)
+	bytes, err := c.syncSendAndReceive(coordinator, request)
 	if err != nil {
 		return err
 	}
 
 	response := new(OffsetCommitResponse)
-	decodingErr := dc.decode(bytes, response)
+	decodingErr := c.decode(bytes, response)
 	if decodingErr != nil {
 		log.Errorf("Could not decode an OffsetCommitResponse. Reason: %s", decodingErr.Reason())
 		return decodingErr.Error()
@@ -505,7 +496,7 @@ func (dc *DefaultConnector) tryCommitOffset(group string, topic string, partitio
 	return nil
 }
 
-func (dc *DefaultConnector) decode(bytes []byte, response Response) *DecodingError {
+func (c *KafkaClient) decode(bytes []byte, response Response) *DecodingError {
 	decoder := NewBinaryDecoder(bytes)
 	decodingErr := response.Read(decoder)
 	if decodingErr != nil {
@@ -516,30 +507,30 @@ func (dc *DefaultConnector) decode(bytes []byte, response Response) *DecodingErr
 	return nil
 }
 
-func (dc *DefaultConnector) sendToAllAndReturnFirstSuccessful(request Request, check func([]byte) (Response, error)) (Response, error) {
-	dc.lock.RLock()
-	brokerConnection := dc.metadata.Brokers.GetAll()
+func (c *KafkaClient) sendToAllAndReturnFirstSuccessful(request Request, check func([]byte) (Response, error)) (Response, error) {
+	c.lock.RLock()
+	brokerConnection := c.metadata.Brokers.GetAll()
 	if len(brokerConnection) == 0 {
-		dc.lock.RUnlock()
-		err := dc.metadata.Refresh(nil)
+		c.lock.RUnlock()
+		err := c.metadata.Refresh(nil)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		dc.lock.RUnlock()
+		c.lock.RUnlock()
 	}
 
-	response, err := dc.sendToAllBrokers(brokerConnection, request, check)
+	response, err := c.sendToAllBrokers(brokerConnection, request, check)
 	if err != nil {
-		response, err = dc.sendToAllBrokers(dc.bootstrapBrokers, request, check)
+		response, err = c.sendToAllBrokers(c.bootstrapBrokers, request, check)
 	}
 
 	return response, err
 }
 
-func (dc *DefaultConnector) sendToAllBrokers(brokerConnections []*BrokerConnection, request Request, check func([]byte) (Response, error)) (Response, error) {
-	dc.lock.RLock()
-	defer dc.lock.RUnlock()
+func (c *KafkaClient) sendToAllBrokers(brokerConnections []*BrokerConnection, request Request, check func([]byte) (Response, error)) (Response, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	if len(brokerConnections) == 0 {
 		return nil, errors.New("Empty broker list")
 	}
@@ -548,7 +539,7 @@ func (dc *DefaultConnector) sendToAllBrokers(brokerConnections []*BrokerConnecti
 	for i := 0; i < len(brokerConnections); i++ {
 		brokerConnection := brokerConnections[i]
 		go func() {
-			bytes, err := dc.syncSendAndReceive(brokerConnection, request)
+			bytes, err := c.syncSendAndReceive(brokerConnection, request)
 			responses <- &rawResponseAndError{bytes, brokerConnection, err}
 		}()
 	}
@@ -569,18 +560,18 @@ func (dc *DefaultConnector) sendToAllBrokers(brokerConnections []*BrokerConnecti
 	return nil, response.err
 }
 
-func (dc *DefaultConnector) syncSendAndReceive(broker *BrokerConnection, request Request) ([]byte, error) {
+func (c *KafkaClient) syncSendAndReceive(broker *BrokerConnection, request Request) ([]byte, error) {
 	conn, err := broker.GetConnection()
 	if err != nil {
 		return nil, err
 	}
 
-	id := dc.metadata.Brokers.NextCorrelationID()
-	if err := dc.send(id, conn, request); err != nil {
+	id := c.metadata.Brokers.NextCorrelationID()
+	if err := c.send(id, conn, request); err != nil {
 		return nil, err
 	}
 
-	bytes, err := dc.receive(conn)
+	bytes, err := c.receive(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -589,13 +580,13 @@ func (dc *DefaultConnector) syncSendAndReceive(broker *BrokerConnection, request
 	return bytes, err
 }
 
-func (dc *DefaultConnector) send(correlationID int32, conn *net.TCPConn, request Request) error {
-	writer := NewRequestHeader(correlationID, dc.config.ClientID, request)
+func (c *KafkaClient) send(correlationID int32, conn *net.TCPConn, request Request) error {
+	writer := NewRequestHeader(correlationID, c.config.ClientID, request)
 	bytes := make([]byte, writer.Size())
 	encoder := NewBinaryEncoder(bytes)
 	writer.Write(encoder)
 
-	err := conn.SetWriteDeadline(time.Now().Add(dc.config.WriteTimeout))
+	err := conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout))
 	if err != nil {
 		return err
 	}
@@ -603,8 +594,8 @@ func (dc *DefaultConnector) send(correlationID int32, conn *net.TCPConn, request
 	return err
 }
 
-func (dc *DefaultConnector) receive(conn *net.TCPConn) ([]byte, error) {
-	err := conn.SetReadDeadline(time.Now().Add(dc.config.ReadTimeout))
+func (c *KafkaClient) receive(conn *net.TCPConn) ([]byte, error) {
+	err := conn.SetReadDeadline(time.Now().Add(c.config.ReadTimeout))
 	if err != nil {
 		return nil, err
 	}
@@ -629,10 +620,10 @@ func (dc *DefaultConnector) receive(conn *net.TCPConn) ([]byte, error) {
 	return response, nil
 }
 
-func (dc *DefaultConnector) topicMetadataValidator(topics []string) func(bytes []byte) (Response, error) {
+func (c *KafkaClient) topicMetadataValidator(topics []string) func(bytes []byte) (Response, error) {
 	return func(bytes []byte) (Response, error) {
 		response := new(MetadataResponse)
-		err := dc.decode(bytes, response)
+		err := c.decode(bytes, response)
 		if err != nil {
 			return nil, err.Error()
 		}
@@ -662,9 +653,9 @@ func (dc *DefaultConnector) topicMetadataValidator(topics []string) func(bytes [
 	}
 }
 
-func (dc *DefaultConnector) consumerMetadataValidator(bytes []byte) (Response, error) {
+func (c *KafkaClient) consumerMetadataValidator(bytes []byte) (Response, error) {
 	response := new(ConsumerMetadataResponse)
-	err := dc.decode(bytes, response)
+	err := c.decode(bytes, response)
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -676,9 +667,9 @@ func (dc *DefaultConnector) consumerMetadataValidator(bytes []byte) (Response, e
 	return response, nil
 }
 
-func (dc *DefaultConnector) offsetValidator(bytes []byte) (Response, error) {
+func (c *KafkaClient) offsetValidator(bytes []byte) (Response, error) {
 	response := new(OffsetResponse)
-	err := dc.decode(bytes, response)
+	err := c.decode(bytes, response)
 	if err != nil {
 		return nil, err.Error()
 	}

@@ -10,7 +10,7 @@ import (
 
 type Metadata struct {
 	Brokers         *Brokers
-	connector       Connector
+	kafka           Client
 	metadataTTL     time.Duration
 	metadata        map[string]map[int32]int32
 	metadataExpires map[string]time.Time
@@ -21,10 +21,10 @@ type Metadata struct {
 	offsetCoordinatorLock sync.RWMutex
 }
 
-func NewMetadata(connector Connector, brokers *Brokers, metadataTTL time.Duration) *Metadata {
+func NewMetadata(kafkaClient Client, brokers *Brokers, metadataTTL time.Duration) *Metadata {
 	return &Metadata{
 		Brokers:            brokers,
-		connector:          connector,
+		kafka:              kafkaClient,
 		metadataTTL:        metadataTTL,
 		metadata:           make(map[string]map[int32]int32),
 		metadataExpires:    make(map[string]time.Time),
@@ -140,7 +140,7 @@ func (m *Metadata) refreshOffsetCoordinator(group string) error {
 	m.offsetCoordinatorLock.Lock()
 	defer m.offsetCoordinatorLock.Unlock()
 
-	metadata, err := m.connector.GetConsumerMetadata(group)
+	metadata, err := m.kafka.GetConsumerMetadata(group)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (m *Metadata) refreshIfExpired(topic string, ttl time.Time) error {
 }
 
 func (m *Metadata) refresh(topics []string) error {
-	topicMetadataResponse, err := m.connector.GetTopicMetadata(topics)
+	topicMetadataResponse, err := m.kafka.GetTopicMetadata(topics)
 	if err != nil {
 		return err
 	}
