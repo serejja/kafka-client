@@ -556,7 +556,7 @@ func (c *KafkaClient) syncSendAndReceive(broker *BrokerConnection, request Reque
 	}
 
 	id := c.metadata.Brokers.NextCorrelationID()
-	if err := c.send(id, conn, request); err != nil {
+	if err = c.send(id, conn, request); err != nil {
 		return nil, err
 	}
 

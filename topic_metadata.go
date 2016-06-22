@@ -178,7 +178,8 @@ func (pm *PartitionMetadata) Read(decoder Decoder) *DecodingError {
 
 	pm.Replicas = make([]int32, replicasLength)
 	for i := int32(0); i < replicasLength; i++ {
-		replica, err := decoder.GetInt32()
+		var replica int32
+		replica, err = decoder.GetInt32()
 		if err != nil {
 			return NewDecodingError(err, reasonInvalidPartitionMetadataReplica)
 		}
