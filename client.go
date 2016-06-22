@@ -267,7 +267,7 @@ func (c *KafkaClient) Fetch(topic string, partition int32, offset int64) (*Fetch
 	}
 
 	if response.Error(topic, partition) == ErrNotLeaderForPartition {
-		log.Infof("Sent a fetch reqest to a non-leader broker. Refleshing metadata for topic %s and retrying the request", topic)
+		log.Infof("Sent a fetch reqest to a non-leader broker. Refreshing metadata for topic %s and retrying the request", topic)
 		err = c.metadata.Refresh([]string{topic})
 		if err != nil {
 			return nil, err
