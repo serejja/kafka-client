@@ -250,3 +250,19 @@ func TestSizingEncoder(t *testing.T) {
 	//and N*(N+1)/2 for actual arrays
 	assert(t, int(bytesEncoder.Size()), (numValues+1)*4+((numValues*(numValues+1))/2))
 }
+
+func BenchmarkEncoder(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		request := new(HeartbeatRequest)
+		request.GenerationID = int32(i)
+		request.GroupID = "test-client-group"
+		request.MemberID = "test-client-member"
+
+		writer := NewRequestHeader(1, "test-client", request)
+		bytes := make([]byte, writer.Size())
+		encoder := NewBinaryEncoder(bytes)
+		writer.Write(encoder)
+	}
+}
