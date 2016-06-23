@@ -2,7 +2,7 @@ package client
 
 import (
 	"encoding/binary"
-	"hash/crc32"
+	"github.com/klauspost/crc32"
 )
 
 // Encoder is able to encode actual data into a Kafka wire protocol byte sequence.
@@ -233,7 +233,6 @@ func (cs *CrcSlice) GetPosition() int {
 
 // Update this slice. At this point all necessary data should be written to encoder.
 func (cs *CrcSlice) Update(slice []byte) {
-	//TODO https://github.com/Shopify/sarama/issues/255 - maybe port the mentioned CRC algo?
 	crc := crc32.ChecksumIEEE(slice[cs.GetReserveLength():])
 	binary.BigEndian.PutUint32(slice, crc)
 }
