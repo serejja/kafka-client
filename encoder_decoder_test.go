@@ -262,7 +262,11 @@ func BenchmarkEncoder(b *testing.B) {
 
 		writer := NewRequestHeader(1, "test-client", request)
 		bytes := make([]byte, writer.Size())
-		encoder := NewBinaryEncoder(bytes)
+		encoder := encoderPool.Get().(*BinaryEncoder)
+		encoder.buffer = bytes
 		writer.Write(encoder)
+
+		encoder.Reset()
+		encoderPool.Put(encoder)
 	}
 }

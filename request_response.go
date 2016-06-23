@@ -1,5 +1,13 @@
 package client
 
+import "sync"
+
+var sizingEncoderPool = sync.Pool{
+	New: func() interface{} {
+		return NewSizingEncoder()
+	},
+}
+
 // RequestHeader is used to decouple the message header/metadata writing from the actual message.
 // It is able to accept a request and encode/write it according to Kafka Wire Protocol format
 // adding the correlation id and client id to the request.
@@ -20,9 +28,14 @@ func NewRequestHeader(correlationID int32, clientID string, request Request) *Re
 
 // Size returns the size in bytes needed to write this request, including the length field. This value will be used when allocating memory for a byte array.
 func (rw *RequestHeader) Size() int32 {
-	encoder := NewSizingEncoder()
+	encoder := sizingEncoderPool.Get().(*SizingEncoder)
 	rw.Write(encoder)
-	return encoder.Size()
+	size := encoder.Size()
+
+	encoder.Reset()
+	sizingEncoderPool.Put(encoder)
+
+	return size
 }
 
 // Write writes this RequestHeader into a given Encoder.
