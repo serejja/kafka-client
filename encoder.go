@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/binary"
 	"github.com/klauspost/crc32"
+	"sync"
 )
 
 // Encoder is able to encode actual data into a Kafka wire protocol byte sequence.
@@ -35,6 +36,12 @@ type Encoder interface {
 
 	// Tells the last reserved slice to be updated with new data.
 	UpdateReserved()
+}
+
+var encoderPool = sync.Pool{
+	New: func() interface{} {
+		return NewBinaryEncoder(nil)
+	},
 }
 
 // BinaryEncoder implements Decoder and is able to encode actual data into a Kafka wire protocol byte sequence.
@@ -112,6 +119,12 @@ func (be *BinaryEncoder) UpdateReserved() {
 	slice.Update(be.buffer[slice.GetPosition():be.pos])
 }
 
+func (be *BinaryEncoder) Reset() {
+	be.buffer = be.buffer[:0]
+	be.pos = 0
+	be.stack = be.stack[:0]
+}
+
 // SizingEncoder is used to determine the size for []byte that will hold the actual encoded data.
 // This is used as an optimization as it is cheaper to run once and determine the size instead of growing the slice dynamically.
 type SizingEncoder struct {
@@ -168,6 +181,11 @@ func (se *SizingEncoder) Reserve(slice UpdatableSlice) {
 // UpdateReserved tells the last reserved slice to be updated with new data.
 func (se *SizingEncoder) UpdateReserved() {
 	//do nothing
+}
+
+// Reset resets this encoders value to 0 for reusing.
+func (se *SizingEncoder) Reset() {
+	se.size = 0
 }
 
 // UpdatableSlice is an interface that is used when the encoder has to write the value based on bytes that are not yet written (e.g. calculate the CRC of the message).

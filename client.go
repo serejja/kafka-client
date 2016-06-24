@@ -572,8 +572,12 @@ func (c *KafkaClient) syncSendAndReceive(broker *BrokerConnection, request Reque
 func (c *KafkaClient) send(correlationID int32, conn *net.TCPConn, request Request) error {
 	writer := NewRequestHeader(correlationID, c.config.ClientID, request)
 	bytes := make([]byte, writer.Size())
-	encoder := NewBinaryEncoder(bytes)
+	encoder := encoderPool.Get().(*BinaryEncoder)
+	encoder.buffer = bytes
 	writer.Write(encoder)
+
+	encoder.Reset()
+	encoderPool.Put(encoder)
 
 	err := conn.SetWriteDeadline(time.Now().Add(c.config.WriteTimeout))
 	if err != nil {
