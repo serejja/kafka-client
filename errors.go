@@ -20,7 +20,7 @@ var ErrOffsetOutOfRange = errors.New("The requested offset is outside the range 
 // ErrInvalidMessage is a mapping for Kafka error code 2.
 var ErrInvalidMessage = errors.New("Message contents does not match its CRC")
 
-// ErrUnknownTopicOrPartition is a mapping for Kafka erfror code 3.
+// ErrUnknownTopicOrPartition is a mapping for Kafka error code 3.
 var ErrUnknownTopicOrPartition = errors.New("This request is for a topic or partition that does not exist on this broker.")
 
 // ErrInvalidMessageSize is a mapping for Kafka error code 4.
